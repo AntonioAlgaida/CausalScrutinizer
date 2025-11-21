@@ -1,0 +1,44 @@
+
+# Python virtual environments and caches
+__pycache__/
+venv/
+.env
+*.egg-info/
+.ipynb_checkpoints/
+*.pyc
+
+# IDE files
+.vscode/
+.idea/
+.history/
+
+# Data files
+data/raw/
+data/rendered_gifs/
+data/rationales/
+data/mined_scenarios/
+outputs/
+*.parquet
+*.csv
+
+# Models
+models/
+*.gguf
+
+# Specific large file types to ignore everywhere
+*.npz
+*.gif
+*.json
+*.csv
+*.png
+*.txt
+*.log
+
+# Logs and runs
+runs/
+
+
+# But we want to KEEP a few specific text files
+# The '!' negates a previous rule.
+!prompts/grammars/causal_scrutinizer_v1.gbnf
+!requirements.txt

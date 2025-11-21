@@ -1,0 +1,85 @@
+# File: configs/main_config.yaml
+
+# --- Main Configuration for The Causal Scrutinizer ---
+
+data:
+  # IMPORTANT: This is the full, absolute path to the directory
+  #            containing your 'training' and 'validation' subfolders
+  #            of .npz files.
+  processed_npz_dir: "/mnt/d/waymo_datasets/waymo_longtail_rl_data/processed_npz"
+
+  # Directory where the detailed, per-timestep criticality scores will be saved
+  criticality_scores_dir: "outputs/criticality_scores"
+
+  # Number of parallel worker processes to use for scoring.
+  # Set to a reasonable number for your machine, e.g., cpu_count() - 2
+  num_workers: 14
+
+scoring:
+  heuristic:
+    # --- Weights for the final criticality score ---
+    # These values can be tuned to prioritize different types of "interesting" events.
+    # They should ideally sum to ~1.0.
+    weight_volatility: 0.35      # SDC's jerk and yaw acceleration (reactive driving)
+    weight_interaction: 0.40     # Other agents converging on the SDC (high conflict)
+    weight_lane_deviation: 0.10  # SDC moving far from lane centers (nudges, swerves)
+    weight_off_road: 0.05       # SDC getting dangerously close to road boundaries
+    weight_density: 0.05         # Simple count of agents in the scene
+
+  
+mining:
+  # The number of top-ranked scenarios to select for our final batch.
+  num_top_scenarios_to_select: 100
+
+
+# In configs/main_config.yaml
+renderer_v6:
+  pixels_per_meter: 5
+  fps: 10
+  
+  # --- NEW: SUMO-inspired color palette (RGB) ---
+  colors:
+    background_verge: [34, 139, 34]    # Forest Green
+    surface_road: [64, 64, 64]         # Dark Gray (like SUMO's black)
+    surface_sidewalk: [192, 192, 192]   # Light Gray
+    surface_driveway: [105, 105, 105]   # Dim Gray
+    surface_bike_lane: [139, 0, 0]
+
+    marking_white: [255, 255, 255]
+    marking_yellow: [255, 255, 0]
+    marking_stop_line: [255, 0, 0] # Bright Red
+    marking_centerline: [160, 160, 160] # A light gray for centerlines
+
+    # --- Agent colors remain the same ---
+    av: [255, 0, 255]
+    vehicle: [0, 0, 255]
+    other: [150, 150, 150]
+    vehicle_glass: [30, 30, 30] # A very dark gray for the windows
+
+    pedestrian_body: [255, 128, 0]     # Bright Orange (High-Visibility Pedestrian)
+    pedestrian_head: [139, 70, 0]      # Darker Orange
+
+    cyclist_body: [0, 255, 255] # Cyan (from our old config)
+    bicycle_wheels: [128, 128, 128] # Gray  NOT USED
+    
+    # --- Traffic Light colors (with alpha for blending) ---
+    tl_stop: [255, 0, 0, 180]
+    tl_caution: [255, 255, 0, 180]
+    tl_go: [0, 255, 0, 180]
+    
+    # --- Static Object colors ---
+    stop_sign: [255, 0, 0]
+
+  # --- NEW: Line widths and styles ---
+  widths:
+    road_lane_width_m: 3.5
+    bike_lane_width_m: 1.5
+    line_solid_px: 2
+    line_dashed_px: 2
+    stop_line_px: 5
+    traffic_light_bar_px: 6 # <-- NEW: Thickness of the SUMO-style light bar
+
+  radii:
+    stop_sign_m: 2.5  # <-- INCREASED VALUE (from 0.9m)
+    traffic_light_m: 2.0
+    pedestrian_m: 1.0

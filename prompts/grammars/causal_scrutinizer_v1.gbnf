@@ -1,0 +1,31 @@
+# GBNF Grammar for the Causal Scrutinizer's Rationale Output
+
+# The root rule: defines the overall structure of the entire output.
+root ::= 
+    "**Internal Monologue (Chain-of-Thought):**\n\n"
+    "1.  **Scene Description:**" ws content-line "\n\n"
+    "2.  **Dynamic Analysis (Frame-by-Frame):**" ws content-multiline "\n\n"
+    "3.  **Synthesize Key Events:**" ws content-line "\n\n"
+    "**Final Answer:**\n\n"
+    "**Step 1: Factual Event Chronology.**\n" content-multiline "\n\n"
+    "**Step 2: Causal Risk Identification.**\n" content-multiline "\n\n"
+    "**Step 3: Optimal Action at the Critical Moment.**\n" content-multiline
+
+# --- Sub-Rules ---
+
+# Defines "content-line": any sequence of characters that is NOT a newline.
+# This is for single-line descriptions.
+content-line ::= ([^\n])+
+
+# Defines "content-multiline": any sequence of characters, including newlines,
+# but it's "non-greedy" so it doesn't consume the start of the next section.
+# This allows for free-form paragraphs.
+content-multiline ::= (
+    "**Step" |
+    "**Internal Monologue" |
+    "**Final Answer" |
+    .
+)*
+
+# Defines optional whitespace (spaces and tabs)
+ws ::= ([ \t])*
