@@ -7,7 +7,7 @@
 ---
 
 ![Teaser GIF](teaser.gif)
-*<p align="center">A challenging intersection scenario from the Waymo Open Motion Dataset, visualized by our V6 Renderer.</p>*
+*<p align="center">A challenging scenario from the Waymo Open Motion Dataset, visualized by our V6 Renderer.</p>*
 
 ---
 
