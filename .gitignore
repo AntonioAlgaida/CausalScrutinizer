@@ -42,6 +42,6 @@ runs/
 # The '!' negates a previous rule.
 !prompts/grammars/causal_scrutinizer_v1.gbnf
 !requirements.txt
-!examples/
+!examples/**
 !figures/
 !figures/architecture_overview.png
