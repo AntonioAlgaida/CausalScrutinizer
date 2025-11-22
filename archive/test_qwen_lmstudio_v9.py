@@ -19,7 +19,7 @@ if PROJECT_ROOT not in sys.path:
 
 from src.utils.config_loader import load_config
 from src.data_processing.waymo_parser import load_npz_scenario
-from src.reasoning.prompt_builder_v5 import get_av_traffic_light_state_at_ts
+from src.reasoning.prompt_builder import get_av_traffic_light_state_at_ts
 from src.utils.geometry import check_for_path_conflict, get_top_k_threats
 
 # --- Helper function ---

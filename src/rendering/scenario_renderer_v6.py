@@ -485,7 +485,7 @@ class ScenarioRendererV6:
             elif agent_type == 2: # TYPE_PEDESTRIAN
                 # print(f"   -> Drawing pedestrian at {agent_state[:2]}")                
                 raw_heading = agent_state[6]
-                corrected_heading = raw_heading + self.rotation_angle
+                corrected_heading = raw_heading + self.rotation_angle + (-np.pi / 2.0)
                 
                 self._draw_sumo_pedestrian(
                     surface=surface,
@@ -900,8 +900,7 @@ class ScenarioRendererV6:
         # Head (Dark Dot)
         head_radius = int(body_radius_px * 0.5)
         head_color = self.config['colors']['pedestrian_head']
-        # Offset head slightly in direction of travel (up in local coords)
-        head_center = (center_of_canvas[0], center_of_canvas[1] - body_radius_px * 0.4)
+        head_center = (center_of_canvas[0], center_of_canvas[1])
         pygame.draw.circle(ped_surface, head_color, head_center, head_radius)
 
         # 5. Rotate and Blit

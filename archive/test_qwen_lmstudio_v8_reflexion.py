@@ -16,7 +16,7 @@ if PROJECT_ROOT not in sys.path:
 
 from src.utils.config_loader import load_config
 from src.data_processing.waymo_parser import load_npz_scenario
-from src.reasoning.prompt_builder_v5 import get_av_traffic_light_state_at_ts
+from src.reasoning.prompt_builder import get_av_traffic_light_state_at_ts
 
 # --- Helper function ---
 def pil_image_to_data_uri(image: Image.Image) -> str:

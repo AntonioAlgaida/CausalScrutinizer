@@ -1,18 +1,15 @@
-# File: preprocess_scenarios.py
+# File: preprocess_scenarios_v2.py
+# (Updated to use the new semantic batch file)
 
 import os
 import sys
 import pandas as pd
 import traceback
 from tqdm import tqdm
-from multiprocessing import Pool, cpu_count, current_process
-import traceback
+from multiprocessing import Pool, cpu_count
 
-# --- HEADLESS MODE ---
-# Vital for multiprocessing with Pygame. Prevents opening windows for every process.
+# --- HEADLESS MODE & PATH SETUP (unchanged) ---
 os.environ["SDL_VIDEODRIVER"] = "dummy"
-
-# --- Add project root to path ---
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
@@ -20,9 +17,8 @@ if PROJECT_ROOT not in sys.path:
 from src.utils.config_loader import load_config
 from src.data_processing.waymo_parser import load_npz_scenario
 from src.rendering.scenario_renderer_v6 import ScenarioRendererV6
-from src.reasoning.prompt_builder import build_prompt_v4
 
-# --- Global Config for Workers ---
+# --- Global Config & Worker Function (unchanged) ---
 GLOBAL_CONFIG = None
 
 def init_worker(config_path):
@@ -33,93 +29,89 @@ def init_worker(config_path):
 def process_scenario_worker(scenario_id: str):
     """
     Worker function to render a single scenario.
+    (This function's internal logic is robust and does not need to change.)
     """
     try:
-        # 1. Setup Paths
         npz_dir = GLOBAL_CONFIG['data']['processed_npz_dir']
-        output_base_dir = "outputs/preprocessed_scenarios"
-        
+        output_base_dir = "outputs/preprocessed_scenarios_v2"
         scenario_output_dir = os.path.join(output_base_dir, scenario_id)
         gif_output_path = os.path.join(scenario_output_dir, "scenario.gif")
-        context_path = os.path.join(scenario_output_dir, "context.txt")
 
-        # 2. Resume Logic: Skip if GIF exists
         if os.path.exists(gif_output_path):
-            return f"SKIP: {scenario_id}"
+            return "SKIP"
 
-        # 3. Load Data
-        scenario_path = os.path.join(npz_dir, 'validation', f"{scenario_id}.npz")
+        scenario_path = os.path.join(npz_dir, 'training', f"{scenario_id}.npz")
         if not os.path.exists(scenario_path):
-            return f"MISSING: {scenario_id}"
+            return "MISSING"
         
         scenario_data = load_npz_scenario(scenario_path)
-
-        # 4. Create Directory
         os.makedirs(scenario_output_dir, exist_ok=True)
 
-        # 6. Render GIF using V6 Engine
-        # Note: We initialize the renderer INSIDE the worker.
-        # Pygame surfaces cannot be pickled, so we can't pass a renderer object.
         renderer = ScenarioRendererV6(scenario_data, GLOBAL_CONFIG['renderer_v6'])
         renderer.render_to_gif(gif_output_path)
         renderer.close()
         
-        return f"DONE: {scenario_id}"
-
+        return "DONE"
     except Exception as e:
-        print(traceback.format_exc())
-        # Return error message instead of crashing
-        return f"ERROR: {scenario_id} - {str(e)}"
+        return f"ERROR: {str(e)}"
 
 def main():
     print("============================================================")
-    print("   STAGE 1: PREPROCESS SCENARIOS (V6 RENDERER + MULTIPROC)  ")
+    print("   STAGE 1: PREPROCESS SEMANTIC BATCH (V6 RENDERER)     ")
     print("============================================================")
 
     try:
-        # 1. Setup
+        # --- 1. Setup ---
         config_path = os.path.join(PROJECT_ROOT, "configs/main_config.yaml")
-        if not os.path.exists(config_path):
-             raise FileNotFoundError("Config file not found.")
-             
-        # Load config locally just to get paths for the CSV
         temp_config = load_config(config_path)
-        mined_scenarios_csv = "data/mined_scenarios/critical_scenario_ids_v1.csv"
+        
+        # --- THE CRITICAL CHANGE IS HERE ---
+        # Point to the new, semantically mined CSV file.
+        mined_scenarios_csv = "data/mined_scenarios/golden_batch_semantic_training.csv"
         
         if not os.path.exists(mined_scenarios_csv):
-            raise FileNotFoundError(f"Mined CSV not found at '{mined_scenarios_csv}'.")
+            raise FileNotFoundError(f"Mined semantic batch CSV not found at '{mined_scenarios_csv}'. "
+                                    "Please run 'mine_causal_complexity.py' first.")
         
-        # 2. Load Work Queue
+        # --- 2. Load Work Queue ---
         df_scenarios = pd.read_csv(mined_scenarios_csv)
         scenario_ids = df_scenarios['scenario_id'].tolist()
         
-        num_workers = max(1, cpu_count() - 2) # Leave 2 cores for OS/System
-        print(f"📂 Scenarios to process: {len(scenario_ids)}")
+        num_workers = temp_config['data'].get('num_workers', max(1, cpu_count() - 2))
+        print(f"📂 Found semantic batch file. Scenarios to process: {len(scenario_ids)}")
+        
+        # Optional: Print a summary of the categories we've loaded
+        print("\n--- Batch Composition ---")
+        print(df_scenarios['category'].value_counts())
+        print("-------------------------\n")
+        
         print(f"🚀 Spawning {num_workers} worker processes...")
 
-        # 3. Run Parallel Processing
+        # --- 3. Run Parallel Processing ---
         results = []
         with Pool(processes=num_workers, initializer=init_worker, initargs=(config_path,)) as pool:
-            # imap_unordered is faster as we don't care about order
             for result in tqdm(pool.imap_unordered(process_scenario_worker, scenario_ids), total=len(scenario_ids)):
                 results.append(result)
 
-        # 4. Summary
-        skipped = sum(1 for r in results if r.startswith("SKIP"))
-        done = sum(1 for r in results if r.startswith("DONE"))
+        # --- 4. Summary ---
+        skipped = sum(1 for r in results if r == "SKIP")
+        done = sum(1 for r in results if r == "DONE")
+        missing = sum(1 for r in results if r == "MISSING")
         errors = [r for r in results if r.startswith("ERROR")]
-        missing = sum(1 for r in results if r.startswith("MISSING"))
 
-        print("\n--- Batch Processing Complete ---")
-        print(f"✅ Rendered: {done}")
-        print(f"⏭️  Skipped:  {skipped}")
+        print("\n--- Batch Preprocessing Complete ---")
+        print(f"✅ Rendered: {done} new GIFs.")
+        print(f"⏭️  Skipped (already exist): {skipped}")
+        print(f"❓ Missing NPZ file: {missing}")
         print(f"❌ Errors:   {len(errors)}")
-        print(f"❓ Missing:  {missing}")
         
         if errors:
-            print("\nError Details:")
-            for err in errors:
-                print(err)
+            print("\n--- Error Details ---")
+            # To avoid spamming, we'll just show the first 5 errors
+            for i, err in enumerate(errors[:5]):
+                print(f"  {i+1}: {err}")
+            if len(errors) > 5:
+                print(f"  ... and {len(errors) - 5} more.")
 
     except Exception as e:
         print(f"\n❌ Fatal Script Error: {e}")

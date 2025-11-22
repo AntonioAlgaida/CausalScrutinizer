@@ -23,7 +23,7 @@ if PROJECT_ROOT not in sys.path:
 # --- Import all our final, definitive modules ---
 from src.utils.config_loader import load_config
 from src.data_processing.waymo_parser import load_npz_scenario
-from src.reasoning.prompt_builder_v5 import get_av_traffic_light_state_at_ts
+from src.reasoning.prompt_builder import get_av_traffic_light_state_at_ts
 from src.utils.geometry import check_for_path_conflict, get_top_k_threats
 
 # --- Helper Functions ---
@@ -61,18 +61,62 @@ SYSTEM_PROMPT = """You are "Scrutinizer-AI," a world-class, expert-level Autonom
     *   **Symbolic, Not Literal:** Pedestrians (Orange Icons) and Cyclists (Cyan Triangles) are intentionally enlarged for high visibility. Their size is symbolic of their importance, not their physical scale.
     *   **Trust the Legend:** All objects are defined by the provided visual legend. If you see something that looks like a "bus," but it is colored blue, you MUST refer to it as a "Blue Vehicle" as per the legend. Do not add details not present in the schematics.
 
-4.  **Prioritize Direct Conflicts:** A ground-truth `AV Path Conflict: YES` is the most severe and immediate type of risk. This is a definitive signal of a safety-critical event and **must** be the primary focus of your causal analysis when present. The `Top 3 Dynamic Agents` list provides crucial context about other actors in the scene but does not imply a collision course unless also flagged by the `Path Conflict` status.
+4.  **Prioritize Conflict Inception:** The ground-truth `AV Path Conflict Status` is your key signal.
+    *   A status of **`CONFLICT_INCEPTION`** marks the beginning of a new, safety-critical event. This is the **critical moment** for your analysis.
+    *   A status of **`CONFLICT_SUSTAINED`** indicates a stable, ongoing situation (like car-following) that is less urgent.
+    *   A status of **`NO_CONFLICT`** indicates the path is clear.
 """
 
-USER_TASK_KIMI = """Your task is to produce a **Comprehensive Causal Audit** of the provided scenario by synthesizing the visual evidence and the associated **Ground-Truth Data**.
+USER_TASK_KIMI = USER_TASK_KIMI = """Your task is to produce a **Comprehensive Causal Audit** by **deeply synthesizing** the visual evidence with the provided Ground-Truth Data.
+
+--- EXAMPLE OF A PERFECT CAUSAL AUDIT ---
+
+Here is an example of a perfect, expert-level audit for a fictional scenario. You MUST follow this format and match this level of detail, tone, and reasoning quality.
+
+**Fictional Scenario Context:**
+A Magenta AV is approaching a large, signalized intersection. Its traffic light is GREEN. An Orange Pedestrian, initially on the sidewalk, suddenly steps into the crosswalk directly in the AV's path.
+
+**Example Ground-Truth Data (Abbreviated):**
+> **Frame 1 (Timestep 10):** AV Traffic Light: GREEN, AV Path Conflict: NO
+> **Frame 2 (Timestep 20):** AV Traffic Light: GREEN, AV Path Conflict: NO
+> **Frame 3 (Timestep 30):** AV Traffic Light: GREEN, AV Path Conflict: YES (PEDESTRIAN, ID: 42)
+> **Frame 4 (Timestep 40):** AV Traffic Light: GREEN, AV Path Conflict: YES (PEDESTRIAN, ID: 42)
+
+**Example of the Perfect Output You Should Generate:**
+
+**Step 1: Detailed Scene Elaboration.**
+The scene is a large, signalized urban intersection with three lanes of travel in each direction. The environment is complex, featuring multiple striped crosswalks, a dark red bike lane on the right, and several gray driveways. The Magenta AV is positioned in the center lane, and its initial "ego-up" orientation indicates a clear intention to proceed straight. The scene is populated with several other Blue Vehicles and multiple Orange Pedestrians on the sidewalks. The presence of SUMO-style traffic light bars confirms that this is a signal-controlled junction.
+
+**Step 2: Factual Event Chronology (Detailed Frame-by-Frame Analysis).**
+Summarize the key sequence of events. For each event, you **MUST** briefly describe the visual evidence that corresponds to the ground-truth data.
+*   **Frame 1 (Timestep 10):** The Magenta AV is proceeding towards the intersection at a steady speed. The ground truth confirms its traffic light is **GREEN** and there is **NO** path conflict. Visually, an Orange Pedestrian (ID: 42) is visible on the right-hand sidewalk, stationary and not indicating intent to cross. The situation is nominal.
+*   **Frame 2 (Timestep 20):** The AV continues its approach. The ground truth remains nominal (`AV Traffic Light: GREEN`, `AV Path Conflict: NO`). Visually, the pedestrian (ID: 42) appears to have turned towards the street, but is still on the sidewalk. This is a subtle visual cue of a potential change in intent.
+*   **Frame 3 (Timestep 30) - THE CRITICAL MOMENT:** The AV is now close to the crosswalk. The ground truth flags a critical state change: **`AV Path Conflict: YES (PEDESTRIAN, ID: 42)`**. This aligns perfectly with the visual evidence, which now shows the pedestrian has stepped off the curb and is entering the AV's lane. The ground truth confirms this is the primary dynamic agent, closing at 4.5 m/s.
+*   **Frame 4 (Timestep 40):** The AV has begun to decelerate (inferred from the shrinking distance covered between frames). The ground truth confirms the **Path Conflict** is still active. Visually, the pedestrian is now fully in the center of the AV's lane.
+
+**Step 3: Comprehensive Causal Risk Identification.**
+-   **Primary Causal Risk:** The primary risk is an imminent collision with a vulnerable road user (Pedestrian 42) who has entered the AV's path unexpectedly.
+    -   *Cause:* The pedestrian made an unpredictable decision to step into the crosswalk against the AV's green light.
+    -   *Effect:* The ground-truth system correctly detected a path conflict at Timestep 30.
+    -   *Consequence:* If the AV had maintained its course and speed based only on its green light, a high-severity impact would have been unavoidable.
+-   **Secondary / Contributing Risks:** The AV's own forward momentum while proceeding through the "stale green" light is a contributing risk. While legally permissible, it reduces the available time to react to unexpected "expectation violation" events like this one.
+
+**Step 4: Optimal Action and Counterfactual.**
+-   **Optimal Action:** The single, safest action the AV must take at the critical moment (Timestep 30) is to initiate immediate, maximum-effort emergency braking.
+-   **Justification:** The ground-truth `AV Path Conflict: YES` is a non-negotiable, safety-critical signal. It instantly overrides the green light. The AV's safety protocols must prioritize avoiding a collision with a pedestrian over maintaining its right-of-way.
+-   **Counterfactual Analysis:** If the AV's system had a delay or failed to react to the conflict flag at Timestep 30, it would have struck the pedestrian. This would represent a catastrophic failure to handle a classic "jaywalking" or "sudden actor" scenario.
+
+--- END OF EXAMPLE ---
+
+Now, apply this exact same methodology and level of detail to the new scenario provided below.
+
 
 --- DEEP REASONING DIRECTIVE ---
-Before you begin writing the final, structured output, you **MUST** engage in a deep, internal, step-by-step reasoning process. Use your native `◁think▷` capability to build a detailed mental model of the entire scenario from start to finish. In your thinking process, you should:
-1.  Methodically analyze each frame, correlating the visual evidence with every piece of ground-truth data provided.
-2.  Formulate a clear hypothesis about the primary causal event and any contributing factors.
-3.  Consider the full chain of cause and effect.
+Before your final answer, you MUST engage in a deep `◁think▷` process. In your thinking, for **each and every frame**, you must perform this two-step analysis:
+1.  **State the Ground Truth:** First, state the `AV Path Conflict Status` provided for that frame.
+2.  **Find the Visual Evidence:** Then, you MUST describe what you see in the image that **supports or explains** that ground-truth fact. *Example: "The ground truth says Path Conflict is YES with Vehicle 78. Visually, I can see that the Magenta AV's dashed trail is pointed directly at the Blue Vehicle (ID 78), and they are only about one lane-dash apart."*
 
-Only after you have completed this internal monologue should you generate the final, clean output in the format specified below.
+Only after completing this frame-by-frame visual grounding should you generate the final output.
 
 --- FINAL OUTPUT FORMAT ---
 
@@ -98,7 +142,7 @@ def process_single_scenario(scenario_id: str, client: OpenAI, config: dict, lege
     The main workhorse function. Processes a single scenario from ID to saved JSON.
     """
     # --- 1. Setup Paths and Check for Existing Output ---
-    output_dir = "outputs/causal_rationale_dataset"
+    output_dir = "outputs/causal_rationale_dataset_v2"
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, f"{scenario_id}.json")
 
@@ -108,13 +152,13 @@ def process_single_scenario(scenario_id: str, client: OpenAI, config: dict, lege
     # --- 2. Load Scenario-Specific Assets (Data & GIF) ---
     try:
         npz_dir = config['data']['processed_npz_dir']
-        npz_path = os.path.join(npz_dir, 'validation', f"{scenario_id}.npz")
+        npz_path = os.path.join(npz_dir, 'training', f"{scenario_id}.npz")
         scenario_data = load_npz_scenario(npz_path)
         
-        gif_path = os.path.join("outputs/preprocessed_scenarios", scenario_id, "scenario.gif")
+        gif_path = os.path.join("outputs/preprocessed_scenarios_v2", scenario_id, "scenario.gif")
         gif_image = Image.open(gif_path)
         
-        key_frame_indices = [int(gif_image.n_frames * p) for p in [0.0, 0.2, 0.4, 0.6, 0.8, 0.9]]
+        key_frame_indices = [int(gif_image.n_frames * p) for p in [0.0, 0.1, 0.2, 0.3 ,0.4, 0.5, 0.6, 0.7, 0.8, 0.9]]
         key_frames = [gif_image.seek(i) or gif_image.convert("RGB").copy() for i in key_frame_indices]
     except FileNotFoundError as e:
         print(f"\n- WARNING: Asset not found for {scenario_id}. Skipping. Error: {e}")
@@ -129,23 +173,37 @@ def process_single_scenario(scenario_id: str, client: OpenAI, config: dict, lege
     user_content.append({"type": "image_url", "image_url": {"url": pil_image_to_data_uri(legend_image)}})
     user_content.append({"type": "text", "text": f"\n\n{USER_TASK_KIMI}"})
     user_content.append({"type": "text", "text": "\n\n--- Scenario Keyframes & Ground-Truth Data ---"})
-    
+    last_conflict_id = None 
+
     for i, frame in enumerate(key_frames):
         frame_idx = key_frame_indices[i]
         
         av_tl_state = get_av_traffic_light_state_at_ts(scenario_data, frame_idx)
-        has_conflict, conflict_type, conflict_id = check_for_path_conflict(scenario_data, frame_idx)
+        has_conflict_raw, conflict_type, conflict_id = check_for_path_conflict(scenario_data, frame_idx)
         top_agents = get_top_k_threats(scenario_data, frame_idx, k=3)
 
-        conflict_str = f"YES ({conflict_type}, ID: {conflict_id})" if has_conflict else "NO"
-        agents_str = "\n".join([f"    - {t}" for t in top_agents]) if top_agents else "    - None"
+        # conflict_str = f"YES ({conflict_type}, ID: {conflict_id})" if has_conflict else "NO"
+        threats_str = "\n".join([f"    - {t}" for t in top_agents]) if top_agents else "    - None"
         
+        # --- 2. THE NEW STATEFUL LOGIC ---
+        conflict_status_str = "NO_CONFLICT"
+        if has_conflict_raw:
+            if conflict_id != last_conflict_id:
+                # A new conflict has just started! This is the critical event.
+                conflict_status_str = f"CONFLICT_INCEPTION (with {conflict_type} ID: {conflict_id})"
+            else:
+                # This is just a continuation of the previous conflict (car-following).
+                conflict_status_str = f"CONFLICT_SUSTAINED (with {conflict_type} ID: {conflict_id})"
+        
+        # Update the state for the next iteration
+        last_conflict_id = conflict_id if has_conflict_raw else None
+    
         frame_label = (
             f"\n**Frame {i+1} (Timestep: {frame_idx})**\n"
             f"**--- Ground Truth ---**\n"
             f"  - **AV Traffic Light:** {av_tl_state}\n"
-            f"  - **AV Path Conflict:** {conflict_str}\n"
-            f"  - **Top 3 Dynamic Agents (sorted by interaction score):**\n{agents_str}"
+            f"  - **AV Path Conflict Status:** {conflict_status_str}\n" # New, more descriptive label
+            f"  - **Top 3 Dynamic Agents (sorted by interaction score):**\n{threats_str}"
         )
         user_content.append({"type": "text", "text": frame_label})
         user_content.append({"type": "image_url", "image_url": {"url": pil_image_to_data_uri(frame)}})
@@ -192,7 +250,7 @@ def main():
         legend_image = Image.open(os.path.join("outputs/legend_assets", "visual_legend.png")).convert("RGB")
         
         # --- 2. Load the Work Queue ---
-        mined_scenarios_csv = "data/mined_scenarios/critical_scenario_ids_v1.csv"
+        mined_scenarios_csv = "data/mined_scenarios/golden_batch_semantic_training.csv"
         df_scenarios = pd.read_csv(mined_scenarios_csv)
         scenario_ids = df_scenarios['scenario_id'].tolist()
         
@@ -206,7 +264,7 @@ def main():
         # Note: We are running this sequentially for stability with the API.
         # To parallelize, we would need to wrap this in a multiprocessing pool.
         for scenario_id in tqdm(scenario_ids, desc="Auditing Scenarios"):
-            output_path = os.path.join("outputs/causal_rationale_dataset", f"{scenario_id}.json")
+            output_path = os.path.join("outputs/causal_rationale_dataset_v2", f"{scenario_id}.json")
             if os.path.exists(output_path):
                 skipped_count += 1
                 continue
@@ -231,7 +289,7 @@ def main():
         print(f"❌ Failed scenarios: {len(error_list)}")
         if error_list:
             print("   Failed IDs:", error_list)
-        print(f"   Final dataset saved in: {os.path.abspath('outputs/causal_rationale_dataset')}")
+        print(f"   Final dataset saved in: {os.path.abspath('outputs/causal_rationale_dataset_v2')}")
 
     except FileNotFoundError as e:
         print(f"\n❌ FATAL ERROR: A required file was not found. {e}")
